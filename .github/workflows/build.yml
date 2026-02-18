@@ -1,63 +1,71 @@
-name: Build Raylib Web Game
+name: Build & Deploy (raylib web)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  build-web:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y build-essential git python3
+      - name: Install system deps
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential git python3
 
-    - name: Install Emscripten
-      run: |
-        git clone https://github.com/emscripten-core/emsdk.git
-        cd emsdk
-        ./emsdk install latest
-        ./emsdk activate latest
-        source ./emsdk_env.sh
-        echo "EMSDK environment activated"
+      - name: Build raylib + game (emscripten)
+        run: |
+          set -e
 
-    - name: Clone raylib
-      run: |
-        git clone https://github.com/raysan5/raylib.git
-        cd raylib/src
-        make PLATFORM=PLATFORM_WEB -B
+          # 1) Install emsdk
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+          source ./emsdk_env.sh
+          cd ..
 
-    - name: Build game for web
-      run: |
-        source emsdk/emsdk_env.sh
-        cd raylib/src
-        emcc ../../src/main.c -o ../../index.html \
-          -I. libraylib.a \
-          -s USE_GLFW=3 \
-          -s ASYNCIFY \
-          -s TOTAL_MEMORY=67108864 \
-          --shell-file ../src/shell.html
+          # Sanity check: emcc must exist now
+          which emcc
+          emcc -v
 
-    - name: Upload artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: .
+          # 2) Build raylib for web
+          git clone --depth 1 https://github.com/raysan5/raylib.git
+          cd raylib/src
+          make PLATFORM=PLATFORM_WEB -B
+          cd ../..
+
+          # 3) Build your game (expects src/main.c)
+          mkdir -p dist
+          emcc src/main.c -o dist/index.html \
+            -I./raylib/src ./raylib/src/libraylib.a \
+            -s USE_GLFW=3 \
+            -s ASYNCIFY \
+            -s ALLOW_MEMORY_GROWTH=1
+
+          # Optional: if you have assets folder, you can pack it:
+          # emcc ... --preload-file assets@assets
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
 
   deploy:
-    needs: build-web
+    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
