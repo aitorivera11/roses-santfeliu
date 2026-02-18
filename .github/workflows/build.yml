@@ -48,7 +48,7 @@ jobs:
           # 3) Build your game (expects src/main.c)
           mkdir -p dist
           emcc src/main.c -o dist/index.html \
-            -I./raylib/src ./raylib/src/libraylib.a \
+            -I./raylib/src ./raylib/src/libraylib.web.a \
             -s USE_GLFW=3 \
             -s ASYNCIFY \
             -s ALLOW_MEMORY_GROWTH=1
