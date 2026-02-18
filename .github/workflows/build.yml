@@ -1,0 +1,63 @@
+name: Build Raylib Web Game
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential git python3
+
+    - name: Install Emscripten
+      run: |
+        git clone https://github.com/emscripten-core/emsdk.git
+        cd emsdk
+        ./emsdk install latest
+        ./emsdk activate latest
+        source ./emsdk_env.sh
+        echo "EMSDK environment activated"
+
+    - name: Clone raylib
+      run: |
+        git clone https://github.com/raysan5/raylib.git
+        cd raylib/src
+        make PLATFORM=PLATFORM_WEB -B
+
+    - name: Build game for web
+      run: |
+        source emsdk/emsdk_env.sh
+        cd raylib/src
+        emcc ../../src/main.c -o ../../index.html \
+          -I. libraylib.a \
+          -s USE_GLFW=3 \
+          -s ASYNCIFY \
+          -s TOTAL_MEMORY=67108864 \
+          --shell-file ../src/shell.html
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: .
+
+  deploy:
+    needs: build-web
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
